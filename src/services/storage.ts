@@ -88,10 +88,15 @@ export function getSavedStudentProfile(): StudentProfile {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.STUDENT_PROFILE);
     if (data) {
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      // 기존 기본값(4학년 2반)이었던 경우 새 기본값(3학년 5반)으로 자연스럽게 교체
+      if (parsed.grade === '4' && parsed.classNum === '2') {
+        return { ...parsed, grade: '3', classNum: '5' };
+      }
+      return parsed;
     }
   } catch {}
-  return { grade: '4', classNum: '2', studentNumber: '', studentName: '' };
+  return { grade: '3', classNum: '5', studentNumber: '', studentName: '' };
 }
 
 export function saveStudentProfile(profile: StudentProfile): void {

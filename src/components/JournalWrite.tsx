@@ -39,8 +39,8 @@ export const JournalWrite: React.FC<JournalWriteProps> = ({
   onViewHistory,
 }) => {
   // Student Profile
-  const [grade, setGrade] = useState('4');
-  const [classNum, setClassNum] = useState('2');
+  const [grade, setGrade] = useState('3');
+  const [classNum, setClassNum] = useState('5');
   const [studentNumber, setStudentNumber] = useState('');
   const [studentName, setStudentName] = useState('');
 
@@ -320,7 +320,7 @@ export const JournalWrite: React.FC<JournalWriteProps> = ({
                   type="text"
                   value={grade}
                   onChange={(e) => setGrade(e.target.value)}
-                  placeholder="예: 4"
+                  placeholder="예: 3"
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-amber-50/30 font-medium"
                 />
                 <span className="absolute right-3 top-2.5 text-stone-400">학년</span>
@@ -334,7 +334,7 @@ export const JournalWrite: React.FC<JournalWriteProps> = ({
                   type="text"
                   value={classNum}
                   onChange={(e) => setClassNum(e.target.value)}
-                  placeholder="예: 2"
+                  placeholder="예: 5"
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 focus:outline-hidden focus:ring-2 focus:ring-amber-400 bg-amber-50/30 font-medium"
                 />
                 <span className="absolute right-3 top-2.5 text-stone-400">반</span>

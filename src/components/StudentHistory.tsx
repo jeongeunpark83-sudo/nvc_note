@@ -240,7 +240,7 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({
                       <h4 className="font-bold text-stone-900 text-sm">
                         {entry.studentName}
                         <span className="text-xs text-stone-500 font-normal ml-1">
-                          ({entry.grade || '4'}학년 {entry.classNum || '2'}반 {entry.studentNumber ? `${entry.studentNumber}번` : ''})
+                          ({entry.grade || '3'}학년 {entry.classNum || '5'}반 {entry.studentNumber ? `${entry.studentNumber}번` : ''})
                         </span>
                       </h4>
                       <p className="text-[11px] text-stone-400 flex items-center gap-1">

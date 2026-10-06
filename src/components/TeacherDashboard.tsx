@@ -69,7 +69,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Unique classes in entries
   const classList = useMemo(() => {
     const set = new Set(
-      entries.map((e) => `${e.grade || '4'}학년 ${e.classNum || '2'}반`).filter(Boolean)
+      entries.map((e) => `${e.grade || '3'}학년 ${e.classNum || '5'}반`).filter(Boolean)
     );
     return Array.from(set);
   }, [entries]);
@@ -78,7 +78,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const classEntries = useMemo(() => {
     if (selectedClass === 'all') return entries;
     return entries.filter(
-      (e) => `${e.grade || '4'}학년 ${e.classNum || '2'}반` === selectedClass
+      (e) => `${e.grade || '3'}학년 ${e.classNum || '5'}반` === selectedClass
     );
   }, [entries, selectedClass]);
 
@@ -585,7 +585,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             {entry.studentName}
                           </h4>
                           <span className="text-xs text-stone-500">
-                            {entry.grade || '4'}학년 {entry.classNum || '2'}반{' '}
+                            {entry.grade || '3'}학년 {entry.classNum || '5'}반{' '}
                             {entry.studentNumber ? `${entry.studentNumber}번` : ''}
                           </span>
                           {isUnfulfilled && (

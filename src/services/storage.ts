@@ -6,25 +6,57 @@ const STORAGE_KEYS = {
   TEACHER_PASSWORD: 'nvc_teacher_password_v1',
   GOOGLE_SHEET_URL: 'nvc_google_sheet_url_v1',
   STUDENT_PROFILE: 'nvc_student_profile_v1',
-  CLASS_SETTINGS: 'nvc_class_settings_v1',
+  LAST_SYNC_TIME: 'nvc_last_sync_time_v1',
 };
 
 // 기본 비밀번호
 const DEFAULT_PASSWORD = '1234';
 
-// 로컬 엔트리 불러오기
-export function getEntries(): JournalEntry[] {
+// URL 파라미터에서 sheet 주소 자동 감지 및 등록 (학생들이 공유 링크로 들어왔을 때 자동 연동)
+export function checkUrlParameters(): string | null {
   try {
-    const data = localStorage.getItem(STORAGE_KEYS.ENTRIES);
-    if (!data) {
-      // 초기 기본 샘플 데이터 제공
-      localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(INITIAL_SAMPLE_ENTRIES));
-      return INITIAL_SAMPLE_ENTRIES;
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const sheetParam = params.get('sheet');
+    if (sheetParam && sheetParam.startsWith('https://script.google.com/macros/s/')) {
+      const decoded = decodeURIComponent(sheetParam);
+      setGoogleSheetUrl(decoded);
+      return decoded;
     }
-    return JSON.parse(data);
   } catch (err) {
-    console.error('기록 불러오기 실패:', err);
-    return INITIAL_SAMPLE_ENTRIES;
+    console.warn('URL 파라미터 확인 중 오류:', err);
+  }
+  return null;
+}
+
+// 구글 시트 웹앱 URL 관리
+export function getGoogleSheetUrl(): string {
+  try {
+    // 먼저 URL 쿼리스트링 확인
+    const urlFromParam = checkUrlParameters();
+    if (urlFromParam) return urlFromParam;
+    return localStorage.getItem(STORAGE_KEYS.GOOGLE_SHEET_URL) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setGoogleSheetUrl(url: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.GOOGLE_SHEET_URL, url.trim());
+  } catch {}
+}
+
+// 학생 배포용 공유 링크 생성 (URL에 시트 주소가 자동 인코딩되어 학생 기기에서도 자동 연동됨)
+export function getStudentShareUrl(customSheetUrl?: string): string {
+  try {
+    if (typeof window === 'undefined') return '';
+    const sheet = (customSheetUrl || getGoogleSheetUrl()).trim();
+    const baseUrl = window.location.origin + window.location.pathname;
+    if (!sheet) return baseUrl;
+    return `${baseUrl}?sheet=${encodeURIComponent(sheet)}`;
+  } catch {
+    return '';
   }
 }
 
@@ -39,23 +71,12 @@ export function getTeacherPassword(): string {
 }
 
 export function setTeacherPassword(newPw: string): void {
-  localStorage.setItem(STORAGE_KEYS.TEACHER_PASSWORD, newPw.trim());
-}
-
-// 구글 시트 웹앱 URL 관리
-export function getGoogleSheetUrl(): string {
   try {
-    return localStorage.getItem(STORAGE_KEYS.GOOGLE_SHEET_URL) || '';
-  } catch {
-    return '';
-  }
+    localStorage.setItem(STORAGE_KEYS.TEACHER_PASSWORD, newPw.trim());
+  } catch {}
 }
 
-export function setGoogleSheetUrl(url: string): void {
-  localStorage.setItem(STORAGE_KEYS.GOOGLE_SHEET_URL, url.trim());
-}
-
-// 학생 기본 정보 (기억하기)
+// 학생 프로필 정보
 export interface StudentProfile {
   grade: string;
   classNum: string;
@@ -79,12 +100,164 @@ export function saveStudentProfile(profile: StudentProfile): void {
   } catch {}
 }
 
-// 구글 스프레드시트 웹앱으로 전송 함수
+// 로컬 엔트리 불러오기
+export function getEntries(): JournalEntry[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.ENTRIES);
+    if (!data) {
+      localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(INITIAL_SAMPLE_ENTRIES));
+      return INITIAL_SAMPLE_ENTRIES;
+    }
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('기록 불러오기 실패:', err);
+    return INITIAL_SAMPLE_ENTRIES;
+  }
+}
+
+// 로컬 엔트리 일괄 덮어쓰기/병합
+export function saveLocalEntries(entries: JournalEntry[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
+  } catch (err) {
+    console.error('로컬 기록 저장 실패:', err);
+  }
+}
+
+// 구글 스프레드시트에서 모든 학생 기록 가져오기 (교사 대시보드 및 멀티 기기 취합의 핵심!)
+export async function fetchEntriesFromGoogleSheet(customUrl?: string): Promise<{
+  success: boolean;
+  data?: JournalEntry[];
+  error?: string;
+}> {
+  const url = (customUrl || getGoogleSheetUrl()).trim();
+  if (!url) {
+    return { success: false, error: '구글 시트 웹 앱 URL이 설정되지 않았습니다.' };
+  }
+
+  // 1. 표준 fetch 시도
+  try {
+    // 캐시 방지를 위해 timestamp 추가
+    const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    const response = await fetch(fetchUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const json = await response.json();
+      if (json && json.status === 'success' && Array.isArray(json.data)) {
+        // 시트 데이터 성공적으로 수신
+        const remoteEntries: JournalEntry[] = json.data;
+        
+        // 원격 데이터가 있으면 로컬과 병합 (원격 우선, 로컬의 미동기화 항목 보존)
+        if (remoteEntries.length > 0) {
+          mergeRemoteEntries(remoteEntries);
+        }
+        
+        localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, new Date().toISOString());
+        return { success: true, data: getEntries() };
+      }
+    }
+  } catch (fetchErr: any) {
+    console.warn('표준 GET 요청 실패, JSONP 대체 시도:', fetchErr);
+  }
+
+  // 2. JSONP fallback (네트워크/방화벽 또는 리다이렉트 제한 시)
+  try {
+    const jsonpData = await fetchViaJSONP(url);
+    if (jsonpData && jsonpData.status === 'success' && Array.isArray(jsonpData.data)) {
+      const remoteEntries: JournalEntry[] = jsonpData.data;
+      if (remoteEntries.length > 0) {
+        mergeRemoteEntries(remoteEntries);
+      }
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, new Date().toISOString());
+      return { success: true, data: getEntries() };
+    }
+  } catch (jsonpErr: any) {
+    console.warn('JSONP 요청도 실패:', jsonpErr);
+  }
+
+  return {
+    success: false,
+    error: '구글 시트에서 데이터를 불러오지 못했습니다. 배포 권한("모든 사용자")을 확인해 주세요.',
+  };
+}
+
+// JSONP 헬퍼
+function fetchViaJSONP(url: string): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
+    const script = document.createElement('script');
+    const separator = url.includes('?') ? '&' : '?';
+    script.src = `${url}${separator}callback=${callbackName}&_t=${Date.now()}`;
+    
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP 타임아웃'));
+    }, 12000);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete (window as any)[callbackName];
+    };
+
+    (window as any)[callbackName] = (data: any) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('JSONP 스크립트 로드 에러'));
+    };
+
+    document.head.appendChild(script);
+  });
+}
+
+// 원격 데이터와 로컬 데이터 똑똑하게 병합
+function mergeRemoteEntries(remoteEntries: JournalEntry[]): void {
+  const localList = getEntries();
+  const remoteMap = new Map<string, JournalEntry>();
+
+  // 원격 항목 맵 구성 (ID 또는 날짜+이름+시간 기준)
+  remoteEntries.forEach((r) => {
+    const key = r.id || `${r.date}_${r.studentName}_${r.timestamp}`;
+    remoteMap.set(key, r);
+  });
+
+  // 로컬 항목 중 아직 원격에 없는 것(방금 오프라인으로 쓴 것 등) 찾기
+  const merged: JournalEntry[] = [...remoteEntries];
+  
+  localList.forEach((local) => {
+    const key = local.id || `${local.date}_${local.studentName}_${local.timestamp}`;
+    if (!remoteMap.has(key)) {
+      // 원격에 없으면 로컬 전용 항목이므로 보존
+      merged.push(local);
+    }
+  });
+
+  // 최신 순 정렬
+  merged.sort((a, b) => {
+    const timeA = new Date(a.timestamp || a.date).getTime() || 0;
+    const timeB = new Date(b.timestamp || b.date).getTime() || 0;
+    return timeB - timeA;
+  });
+
+  saveLocalEntries(merged);
+}
+
+// 구글 스프레드시트 웹앱으로 학생 일기 전송
 export async function syncEntryToGoogleSheet(entry: JournalEntry, customUrl?: string): Promise<boolean> {
   const url = (customUrl || getGoogleSheetUrl()).trim();
   if (!url) return false;
 
   const payload = {
+    action: 'add_entry',
     id: entry.id,
     timestamp: entry.timestamp,
     date: entry.date,
@@ -97,10 +270,11 @@ export async function syncEntryToGoogleSheet(entry: JournalEntry, customUrl?: st
     feelingType: entry.feelingType,
     needs: entry.needs,
     request: entry.request,
+    teacherComment: entry.teacherComment || '',
+    teacherSticker: entry.teacherSticker || '',
   };
 
   try {
-    // Google Apps Script는 no-cors 모드로 전송해야 브라우저의 CORS 및 리다이렉트 정책을 통과합니다.
     await fetch(url, {
       method: 'POST',
       mode: 'no-cors',
@@ -112,6 +286,36 @@ export async function syncEntryToGoogleSheet(entry: JournalEntry, customUrl?: st
     return true;
   } catch (err) {
     console.warn('구글 시트 전송 중 오류 발생:', err);
+    return false;
+  }
+}
+
+// 교사 코멘트 구글 시트에 업데이트 전송
+export async function syncCommentToGoogleSheet(
+  id: string,
+  teacherComment: string,
+  teacherSticker: string
+): Promise<boolean> {
+  const url = getGoogleSheetUrl().trim();
+  if (!url) return false;
+
+  try {
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'update_comment',
+        id,
+        teacherComment,
+        teacherSticker,
+      }),
+    });
+    return true;
+  } catch (err) {
+    console.warn('코멘트 시트 동기화 실패:', err);
     return false;
   }
 }
@@ -131,6 +335,22 @@ export async function testGoogleSheetConnection(url: string): Promise<{ success:
   }
 
   try {
+    // 1. GET 테스트로 읽기 권한 확인
+    const getRes = await fetch(cleanUrl + (cleanUrl.includes('?') ? '&' : '?') + '_test=1');
+    if (getRes.ok) {
+      const data = await getRes.json();
+      if (data && data.status === 'success') {
+        return {
+          success: true,
+          message: `구글 시트와 성공적으로 연결되었습니다! (시트에 현재 누적된 학생 기록: ${data.count || 0}건)`,
+        };
+      }
+    }
+  } catch (e) {
+    // GET 에러 시 POST로 백업 테스트 시도
+  }
+
+  try {
     const testEntry: JournalEntry = {
       id: 'test-' + Date.now(),
       timestamp: new Date().toISOString(),
@@ -138,8 +358,8 @@ export async function testGoogleSheetConnection(url: string): Promise<{ success:
       grade: '체크',
       classNum: '체크',
       studentNumber: '0',
-      studentName: '연동테스트_기린',
-      observation: '스프레드시트 연동 테스트를 진행했습니다.',
+      studentName: '연동확인_기린',
+      observation: '스프레드시트 실시간 연동 테스트를 진행했습니다.',
       feelings: ['설레는', '반가운'],
       feelingType: 'fulfilled',
       needs: ['연결과 우정', '신뢰'],
@@ -158,7 +378,7 @@ export async function testGoogleSheetConnection(url: string): Promise<{ success:
 
     return { 
       success: true, 
-      message: '연동 신호가 성공적으로 전송되었습니다! 구글 스프레드시트에 새 행이 생겼는지 확인해 보세요.' 
+      message: '연동 신호가 성공적으로 전송되었습니다! 스프레드시트에 새 행이 생겼는지 확인해 보세요.' 
     };
   } catch (err: any) {
     return { 
@@ -173,7 +393,6 @@ export async function saveEntry(entry: JournalEntry): Promise<{ success: boolean
   try {
     const list = getEntries();
     
-    // 구글 시트 전송 시도
     let synced = false;
     const sheetUrl = getGoogleSheetUrl();
     if (sheetUrl) {
@@ -185,11 +404,9 @@ export async function saveEntry(entry: JournalEntry): Promise<{ success: boolean
       syncedToSheet: synced,
     };
 
-    // 최신 항목이 맨 앞으로
     const newList = [updatedEntry, ...list.filter(e => e.id !== entry.id)];
-    localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(newList));
+    saveLocalEntries(newList);
 
-    // 학생 프로필 저장
     saveStudentProfile({
       grade: entry.grade,
       classNum: entry.classNum,
@@ -204,14 +421,18 @@ export async function saveEntry(entry: JournalEntry): Promise<{ success: boolean
   }
 }
 
-// 항목 수정 (선생님 코멘트 또는 스티커 추가 등)
+// 항목 수정
 export function updateEntry(entry: JournalEntry): void {
   try {
     const list = getEntries();
     const index = list.findIndex(e => e.id === entry.id);
     if (index !== -1) {
       list[index] = entry;
-      localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(list));
+      saveLocalEntries(list);
+    }
+    // 시트에도 업데이트 전송
+    if (entry.teacherComment) {
+      syncCommentToGoogleSheet(entry.id, entry.teacherComment, entry.teacherSticker || '');
     }
   } catch (err) {
     console.error('수정 실패:', err);
@@ -223,7 +444,7 @@ export function deleteEntry(id: string): void {
   try {
     const list = getEntries();
     const filtered = list.filter(e => e.id !== id);
-    localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(filtered));
+    saveLocalEntries(filtered);
   } catch (err) {
     console.error('삭제 실패:', err);
   }

@@ -165,6 +165,9 @@ export const GoogleSheetModal: React.FC<GoogleSheetModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="font-bold text-stone-800 flex items-center gap-1.5 text-xs">
                 📜 Apps Script에 붙여넣을 완성 코드 (Code.gs)
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  다중 기기 실시간 취합 지원
+                </span>
               </span>
               <button
                 type="button"

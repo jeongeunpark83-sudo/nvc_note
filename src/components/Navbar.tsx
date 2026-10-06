@@ -1,12 +1,13 @@
 import React from 'react';
 import { GiraffeCharacter } from './GiraffeCharacter';
-import { BookOpen, PenTool, LayoutDashboard, HelpCircle, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import { BookOpen, PenTool, LayoutDashboard, HelpCircle, FileSpreadsheet, CheckCircle2, Share2 } from 'lucide-react';
 
 interface NavbarProps {
   currentTab: 'write' | 'history' | 'teacher';
   onSelectTab: (tab: 'write' | 'history' | 'teacher') => void;
   onOpenGuide: () => void;
   onOpenSheetModal: () => void;
+  onOpenShareModal?: () => void;
   isSheetConnected: boolean;
 }
 
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectTab,
   onOpenGuide,
   onOpenSheetModal,
+  onOpenShareModal,
   isSheetConnected,
 }) => {
   return (
@@ -80,6 +82,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right side utility icons */}
         <div className="flex items-center gap-1.5">
+          {/* Share Link button */}
+          {onOpenShareModal && (
+            <button
+              onClick={onOpenShareModal}
+              title="학생들에게 배포할 링크와 QR코드 열기"
+              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold transition border border-amber-300 bg-amber-100/70 hover:bg-amber-200 text-amber-900"
+            >
+              <Share2 className="w-3 h-3 text-amber-700" />
+              <span>학생 배포용 링크</span>
+            </button>
+          )}
+
           {/* Sheet Status Badge */}
           <button
             onClick={onOpenSheetModal}

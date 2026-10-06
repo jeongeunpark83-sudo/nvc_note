@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { JournalEntry } from './types/nvc';
 import {
   getEntries,
@@ -6,6 +6,8 @@ import {
   getGoogleSheetUrl,
   setGoogleSheetUrl,
   getSavedStudentProfile,
+  fetchEntriesFromGoogleSheet,
+  checkUrlParameters,
 } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { JournalWrite } from './components/JournalWrite';
@@ -14,43 +16,88 @@ import { TeacherDashboard } from './components/TeacherDashboard';
 import { TeacherLoginModal } from './components/TeacherLoginModal';
 import { PasswordChangeModal } from './components/PasswordChangeModal';
 import { GoogleSheetModal } from './components/GoogleSheetModal';
+import { ShareModal } from './components/ShareModal';
 import { NvcGuideModal } from './components/NvcGuideModal';
 import { GiraffeCharacter } from './components/GiraffeCharacter';
-import { Heart, Sparkles, ShieldCheck } from 'lucide-react';
+import { Heart } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<'write' | 'history' | 'teacher'>('write');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [sheetUrl, setSheetUrl] = useState<string>('');
   const [isTeacherAuth, setIsTeacherAuth] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
 
   // Modals
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isSheetModalOpen, setIsSheetModalOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
 
-  // Refresh data from localStorage
+  // Sync from sheet function
+  const handleSyncFromSheet = useCallback(async () => {
+    const currentUrl = getGoogleSheetUrl();
+    if (!currentUrl) return;
+
+    setIsSyncing(true);
+    try {
+      const res = await fetchEntriesFromGoogleSheet(currentUrl);
+      if (res.success && res.data) {
+        setEntries(res.data);
+        setLastSyncTime(new Date().toLocaleTimeString('ko-KR'));
+      }
+    } catch (err) {
+      console.warn('동기화 실패:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // Refresh data from localStorage & sheet
   const refreshData = useCallback(() => {
+    // URL param check on load (e.g. ?sheet=...)
+    checkUrlParameters();
     const list = getEntries();
     setEntries(list);
-    setSheetUrl(getGoogleSheetUrl());
+    const configuredSheet = getGoogleSheetUrl();
+    setSheetUrl(configuredSheet);
   }, []);
 
   useEffect(() => {
     refreshData();
-  }, [refreshData]);
+    // If sheet configured, initial fetch from sheet
+    if (getGoogleSheetUrl()) {
+      handleSyncFromSheet();
+    }
+  }, [refreshData, handleSyncFromSheet]);
+
+  // Periodic polling when teacher dashboard is open (every 25 seconds)
+  useEffect(() => {
+    if (currentTab !== 'teacher' || !sheetUrl) return;
+
+    const interval = setInterval(() => {
+      handleSyncFromSheet();
+    }, 25000);
+
+    return () => clearInterval(interval);
+  }, [currentTab, sheetUrl, handleSyncFromSheet]);
 
   // Handle Tab Switch
   const handleSelectTab = (tab: 'write' | 'history' | 'teacher') => {
     if (tab === 'teacher') {
       if (isTeacherAuth) {
         setCurrentTab('teacher');
+        handleSyncFromSheet();
       } else {
         setIsLoginModalOpen(true);
       }
     } else {
       setCurrentTab(tab);
+      if (tab === 'history') {
+        handleSyncFromSheet();
+      }
     }
   };
 
@@ -59,12 +106,16 @@ export default function App() {
     setIsTeacherAuth(true);
     setIsLoginModalOpen(false);
     setCurrentTab('teacher');
+    handleSyncFromSheet();
   };
 
   // On save sheet URL
   const handleSaveSheetUrl = (url: string) => {
     setGoogleSheetUrl(url);
     setSheetUrl(url);
+    if (url) {
+      handleSyncFromSheet();
+    }
   };
 
   // Current active student name
@@ -78,6 +129,7 @@ export default function App() {
         onSelectTab={handleSelectTab}
         onOpenGuide={() => setIsGuideModalOpen(true)}
         onOpenSheetModal={() => setIsSheetModalOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
         isSheetConnected={Boolean(sheetUrl)}
       />
 
@@ -85,8 +137,14 @@ export default function App() {
       <main className="flex-1 pb-16">
         {currentTab === 'write' && (
           <JournalWrite
-            onEntrySaved={refreshData}
-            onViewHistory={() => setCurrentTab('history')}
+            onEntrySaved={() => {
+              refreshData();
+              handleSyncFromSheet();
+            }}
+            onViewHistory={() => {
+              setCurrentTab('history');
+              handleSyncFromSheet();
+            }}
           />
         )}
 
@@ -99,6 +157,8 @@ export default function App() {
               deleteEntry(id);
               refreshData();
             }}
+            onSyncFromSheet={handleSyncFromSheet}
+            isSyncing={isSyncing}
           />
         )}
 
@@ -108,6 +168,10 @@ export default function App() {
             onEntriesChange={refreshData}
             onOpenPasswordModal={() => setIsPasswordModalOpen(true)}
             onOpenSheetModal={() => setIsSheetModalOpen(true)}
+            onOpenShareModal={() => setIsShareModalOpen(true)}
+            onSyncFromSheet={handleSyncFromSheet}
+            isSyncing={isSyncing}
+            lastSyncTime={lastSyncTime}
           />
         )}
       </main>
@@ -130,7 +194,7 @@ export default function App() {
               <span>기린의 따뜻한 큰 심장으로 서로를 이해해요</span>
               <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
             </p>
-            <p>Netlify 배포 지원 · 구글 스프레드시트 실시간 연동</p>
+            <p>다중 기기 실시간 취합 · 구글 스프레드시트 클라우드 연동</p>
           </div>
         </div>
       </footer>
@@ -153,6 +217,12 @@ export default function App() {
         onClose={() => setIsSheetModalOpen(false)}
         currentUrl={sheetUrl}
         onSaveUrl={handleSaveSheetUrl}
+      />
+
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        onOpenSheetConfig={() => setIsSheetModalOpen(true)}
       />
 
       <NvcGuideModal

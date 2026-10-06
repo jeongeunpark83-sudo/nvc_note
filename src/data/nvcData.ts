@@ -175,58 +175,134 @@ export const INITIAL_SAMPLE_ENTRIES: JournalEntry[] = [
   }
 ];
 
-// 구글 앱스 스크립트 Code.gs 기본 템플릿
+// 구글 앱스 스크립트 Code.gs 기본 템플릿 (양방향 실시간 동기화 지원)
 export const GOOGLE_APPS_SCRIPT_CODE = `/**
- * [우리반 비폭력대화 하루공책] 구글 스프레드시트 실시간 연동 스크립트
+ * [우리반 비폭력대화 하루공책] 구글 스프레드시트 실시간 동기화 스크립트
+ * 
+ * 📌 특징:
+ * - 여러 기기(학생 스마트폰, 태블릿, 교사 컴퓨터) 간 실시간 취합 및 동기화 지원
+ * - doGet: 시트에 누적된 학생 기록을 교사 대시보드로 실시간 전달
+ * - doPost: 학생 일기 실시간 저장 및 교사 응원 코멘트/스티커 저장
  * 
  * 📌 설치 및 배포 방법:
- * 1. 구글 스프레드시트 생성 (예: '2026 우리반 비폭력대화 하루공책')
+ * 1. 구글 스프레드시트 생성 (예: '우리반 비폭력대화 하루공책')
  * 2. 상단 메뉴 [확장 프로그램] -> [Apps Script] 클릭
- * 3. 기본 내용을 모두 지우고 이 스크립트 전체를 복사하여 붙여넣기
- * 4. 상단 [저장 (디스크 아이콘 또는 Ctrl+S)] 클릭
- * 5. 우측 상단 파란색 [배포] 버튼 -> [새 배포] 클릭
- * 6. 유형 선택(톱니바퀴)에서 '웹 앱(Web app)' 선택
- *    - 설명: '우리반 하루공책 연동'
+ * 3. 기존 코드를 모두 지우고 이 스크립트 전체를 복사하여 붙여넣기
+ * 4. 상단 [저장 (Ctrl+S)] 클릭
+ * 5. 우측 상단 파란색 [배포] -> [새 배포] 클릭
+ * 6. 유형(톱니바퀴): '웹 앱(Web app)' 선택
+ *    - 설명: '우리반 하루공책 v2'
  *    - 다음 사용자 권한으로 실행: '나(본인 계정)'
- *    - 액세스 권한이 있는 사용자: '모든 사용자(Anyone)'  <-- ⚠️ 반드시 '모든 사용자' 선택!
- * 7. [배포] 버튼 클릭 후 웹 앱 URL 복사
- * 8. 우리반 하루공책 웹사이트의 [구글 시트 연동 설정]에 붙여넣기 완료!
+ *    - 액세스 권한이 있는 사용자: '모든 사용자(Anyone)'  <-- ⚠️ 반드시 '모든 사용자' 필수!
+ * 7. [배포] 클릭 후 승인 절차를 거치고 생성된 '웹 앱 URL'을 복사
+ * 8. 우리반 하루공책 교사 대시보드의 [구글 시트 연동 설정]에 붙여넣기!
  */
 
+// 컬럼 헤더 정의
+var HEADERS = [
+  "제출일시",
+  "기록일자",
+  "학년",
+  "반",
+  "번호",
+  "이름",
+  "1단계: 관찰",
+  "2단계: 느낌",
+  "느낌 유형",
+  "3단계: 욕구",
+  "4단계: 부탁/다짐",
+  "고유ID",
+  "선생님 응원말씀",
+  "선생님 칭찬스티커"
+];
+
+// 시트 초기화 및 헤더 생성
+function ensureHeaders(sheet) {
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS);
+    var range = sheet.getRange(1, 1, 1, HEADERS.length);
+    range.setBackground("#FEF3C7");
+    range.setFontWeight("bold");
+    range.setHorizontalAlignment("center");
+    sheet.setFrozenRows(1);
+  }
+}
+
+// 1. GET 요청 처리: 시트에 저장된 모든 학생 기록을 교사 대시보드 / 다른 기기로 전달
+function doGet(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    ensureHeaders(sheet);
+    
+    var lastRow = sheet.getLastRow();
+    var entries = [];
+    
+    if (lastRow > 1) {
+      var data = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+      
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        if (!row[5]) continue; // 이름이 없으면 건너뜀
+        
+        var rawFeelings = String(row[7] || "");
+        var feelingsArr = rawFeelings ? rawFeelings.split(",").map(function(s) { return s.trim(); }) : [];
+        
+        var rawNeeds = String(row[9] || "");
+        var needsArr = rawNeeds ? rawNeeds.split(",").map(function(s) { return s.trim(); }) : [];
+        
+        var entry = {
+          id: String(row[11] || ("row-" + (i + 2))),
+          timestamp: row[0] instanceof Date ? Utilities.formatDate(row[0], "Asia/Seoul", "yyyy-MM-dd'T'HH:mm:ssXXX") : String(row[0] || ""),
+          date: row[1] instanceof Date ? Utilities.formatDate(row[1], "Asia/Seoul", "yyyy-MM-dd") : String(row[1] || ""),
+          grade: String(row[2] || ""),
+          classNum: String(row[3] || ""),
+          studentNumber: String(row[4] || ""),
+          studentName: String(row[5] || ""),
+          observation: String(row[6] || ""),
+          feelings: feelingsArr,
+          feelingType: String(row[8] || "fulfilled"),
+          needs: needsArr,
+          request: String(row[10] || ""),
+          teacherComment: String(row[12] || ""),
+          teacherSticker: String(row[13] || ""),
+          syncedToSheet: true
+        };
+        entries.push(entry);
+      }
+    }
+    
+    var result = {
+      status: "success",
+      count: entries.length,
+      data: entries
+    };
+    
+    var jsonString = JSON.stringify(result);
+    
+    // JSONP 지원 (학교 방화벽 등 우회용)
+    if (e && e.parameter && e.parameter.callback) {
+      return ContentService.createTextOutput(e.parameter.callback + "(" + jsonString + ")")
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+    
+    return ContentService.createTextOutput(jsonString)
+      .setMimeType(ContentService.MimeType.JSON);
+      
+  } catch (error) {
+    var errorResult = JSON.stringify({ status: "error", message: error.toString() });
+    return ContentService.createTextOutput(errorResult).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// 2. POST 요청 처리: 학생 일기 제출 또는 교사 피드백 저장
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000); // 동시 제출 충돌 방지 락
+  lock.tryLock(10000);
   
   try {
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    ensureHeaders(sheet);
     
-    // 시트가 비어있으면 헤더(제목 행) 자동 생성
-    if (sheet.getLastRow() === 0) {
-      var headers = [
-        "제출일시",
-        "기록일자",
-        "학년",
-        "반",
-        "번호",
-        "이름",
-        "1단계: 관찰",
-        "2단계: 느낌",
-        "느낌 유형",
-        "3단계: 욕구",
-        "4단계: 부탁/다짐",
-        "고유ID"
-      ];
-      sheet.appendRow(headers);
-      
-      // 첫 행 서식 꾸미기 (노란색 파스텔 톤 헤더)
-      var headerRange = sheet.getRange(1, 1, 1, headers.length);
-      headerRange.setBackground("#FEF3C7"); // 파스텔 기린 노랑
-      headerRange.setFontWeight("bold");
-      headerRange.setHorizontalAlignment("center");
-      sheet.setFrozenRows(1);
-    }
-    
-    // 데이터 파싱 (JSON 또는 폼 데이터)
     var data = {};
     if (e.postData && e.postData.contents) {
       try {
@@ -238,12 +314,39 @@ function doPost(e) {
       data = e.parameter;
     }
     
-    // 행 데이터 준비
-    var feelingsStr = Array.isArray(data.feelings) ? data.feelings.join(", ") : (data.feelings || "");
-    var needsStr = Array.isArray(data.needs) ? data.needs.join(", ") : (data.needs || "");
+    var action = data.action || "add_entry";
     
-    var row = [
-      data.timestamp || new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
+    // [동작 1] 교사 응원 코멘트 업데이트
+    if (action === "update_comment") {
+      var targetId = String(data.id || "");
+      var lastRow = sheet.getLastRow();
+      var updated = false;
+      
+      if (lastRow > 1 && targetId) {
+        var idValues = sheet.getRange(2, 12, lastRow - 1, 1).getValues();
+        for (var i = 0; i < idValues.length; i++) {
+          if (String(idValues[i][0]) === targetId) {
+            var rowIndex = i + 2;
+            sheet.getRange(rowIndex, 13).setValue(data.teacherComment || "");
+            sheet.getRange(rowIndex, 14).setValue(data.teacherSticker || "");
+            updated = true;
+            break;
+          }
+        }
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({
+        status: updated ? "success" : "not_found",
+        message: updated ? "코멘트가 시트에 업데이트되었습니다." : "해당 ID를 찾지 못했습니다."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // [동작 2] 학생 새 일기 저장 (기본 동작)
+    var feelingsStr = Array.isArray(data.feelings) ? data.feelings.join(", ") : String(data.feelings || "");
+    var needsStr = Array.isArray(data.needs) ? data.needs.join(", ") : String(data.needs || "");
+    
+    var newRow = [
+      data.timestamp || Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd'T'HH:mm:ssXXX"),
       data.date || Utilities.formatDate(new Date(), "Asia/Seoul", "yyyy-MM-dd"),
       data.grade || "",
       data.classNum || "",
@@ -254,15 +357,18 @@ function doPost(e) {
       data.feelingType || "",
       needsStr,
       data.request || "",
-      data.id || ""
+      data.id || ("entry-" + Date.now()),
+      data.teacherComment || "",
+      data.teacherSticker || ""
     ];
     
-    sheet.appendRow(row);
+    sheet.appendRow(newRow);
     
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      message: "정상적으로 저장되었습니다.",
-      student: data.studentName
+      message: "정상적으로 시트에 저장되었습니다.",
+      student: data.studentName,
+      id: data.id
     })).setMimeType(ContentService.MimeType.JSON);
     
   } catch (error) {
@@ -270,16 +376,8 @@ function doPost(e) {
       status: "error",
       message: error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
-    
   } finally {
     lock.releaseLock();
   }
-}
-
-function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({
-    status: "online",
-    message: "우리반 비폭력대화 하루공책 웹앱이 정상 작동 중입니다. 🦒💛"
-  })).setMimeType(ContentService.MimeType.JSON);
 }
 `;

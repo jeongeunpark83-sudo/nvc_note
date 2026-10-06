@@ -253,7 +253,7 @@ export const JournalWrite: React.FC<JournalWriteProps> = ({
   return (
     <div className="max-w-3xl mx-auto py-6 px-4">
       {/* Intro Header */}
-      <div className="bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 rounded-3xl p-6 border-2 border-amber-200 shadow-sm mb-6 flex flex-col md:flex-row items-center gap-5">
+      <div className="bg-gradient-to-br from-amber-100 via-amber-50 to-orange-50 rounded-3xl p-6 border-2 border-amber-200 shadow-sm mb-4 flex flex-col md:flex-row items-center gap-5">
         <GiraffeCharacter mood="happy" size="md" />
         <div className="flex-1 text-center md:text-left">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-200/70 text-amber-900 rounded-full text-xs font-bold mb-1.5">
@@ -270,6 +270,37 @@ export const JournalWrite: React.FC<JournalWriteProps> = ({
             <span className="font-semibold text-amber-900"> 소중한 마음(욕구)</span>을 나누는 따뜻한 대화법입니다.
           </p>
         </div>
+      </div>
+
+      {/* Cloud Sheet Sync Status Banner */}
+      <div
+        className={`mb-6 p-3 rounded-2xl border text-xs flex items-center justify-between gap-3 ${
+          hasSheetConfigured
+            ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+            : 'bg-amber-50 text-amber-900 border-amber-300'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          {hasSheetConfigured ? (
+            <CloudCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+          )}
+          <span>
+            {hasSheetConfigured
+              ? '선생님 구글 시트와 연결됨: 작성 즉시 선생님 컴퓨터로 실시간 전송됩니다 ✨'
+              : '알림: 선생님이 공유해주신 링크(QR코드)로 접속하면 교사 시트에 자동 취합됩니다.'}
+          </span>
+        </div>
+        <span
+          className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+            hasSheetConfigured
+              ? 'bg-emerald-200 text-emerald-950'
+              : 'bg-amber-200 text-amber-950'
+          }`}
+        >
+          {hasSheetConfigured ? '실시간 연동 ON' : '로컬 보관 모드'}
+        </span>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

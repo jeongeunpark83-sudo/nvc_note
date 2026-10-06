@@ -12,6 +12,7 @@ import {
   BookOpen,
   Trash2,
   Filter,
+  RefreshCw,
 } from 'lucide-react';
 
 interface StudentHistoryProps {
@@ -19,6 +20,8 @@ interface StudentHistoryProps {
   currentStudentName: string;
   onWriteNew: () => void;
   onDeleteEntry: (id: string) => void;
+  onSyncFromSheet?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
 export const StudentHistory: React.FC<StudentHistoryProps> = ({
@@ -26,6 +29,8 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({
   currentStudentName,
   onWriteNew,
   onDeleteEntry,
+  onSyncFromSheet,
+  isSyncing = false,
 }) => {
   const [selectedStudent, setSelectedStudent] = useState<string>(currentStudentName || 'all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,13 +99,27 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onWriteNew}
-          className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-bold shadow-md transition flex items-center gap-2 shrink-0"
-        >
-          <Sparkles className="w-4 h-4" />
-          새 하루공책 쓰기
-        </button>
+        <div className="flex items-center gap-2">
+          {onSyncFromSheet && (
+            <button
+              onClick={onSyncFromSheet}
+              disabled={isSyncing}
+              className="px-3.5 py-2.5 bg-white border border-amber-300 hover:bg-amber-50 text-amber-900 rounded-2xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              title="구글 시트에서 최신 기록 새로고침"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isSyncing ? '동기화 중...' : '시트 새로고침'}</span>
+            </button>
+          )}
+
+          <button
+            onClick={onWriteNew}
+            className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-bold shadow-md transition flex items-center gap-2 shrink-0"
+          >
+            <Sparkles className="w-4 h-4" />
+            새 하루공책 쓰기
+          </button>
+        </div>
       </div>
 
       {/* Filters and Search Bar */}

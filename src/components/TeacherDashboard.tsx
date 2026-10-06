@@ -27,6 +27,10 @@ import {
   Send,
   X,
   Sparkles,
+  RefreshCw,
+  Share2,
+  QrCode,
+  Smartphone,
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -34,6 +38,10 @@ interface TeacherDashboardProps {
   onEntriesChange: () => void;
   onOpenPasswordModal: () => void;
   onOpenSheetModal: () => void;
+  onOpenShareModal: () => void;
+  onSyncFromSheet: () => Promise<void>;
+  isSyncing: boolean;
+  lastSyncTime: string;
 }
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
@@ -41,6 +49,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onEntriesChange,
   onOpenPasswordModal,
   onOpenSheetModal,
+  onOpenShareModal,
+  onSyncFromSheet,
+  isSyncing,
+  lastSyncTime,
 }) => {
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -216,12 +228,33 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Real-time Cloud Sync Button */}
+          <button
+            onClick={onSyncFromSheet}
+            disabled={isSyncing}
+            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            title="구글 시트에 모인 모든 학생 기기의 하루공책을 실시간으로 가져옵니다"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? '시트에서 취합 중...' : '시트 실시간 취합'}</span>
+          </button>
+
+          {/* Share Link & QR Button */}
+          <button
+            onClick={onOpenShareModal}
+            className="px-3.5 py-2 rounded-xl border-2 border-amber-400 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-extrabold transition flex items-center gap-1.5 shadow-xs"
+            title="학생들이 다른 기기에서 바로 연결되는 링크 및 QR코드 생성"
+          >
+            <Share2 className="w-3.5 h-3.5 text-amber-700" />
+            <span>학생 배포용 링크 & QR</span>
+          </button>
+
           <button
             onClick={onOpenSheetModal}
-            className="px-3.5 py-2 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
+            className="px-3.5 py-2 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600" />
-            구글 시트 연동 설정
+            연동 설정
           </button>
 
           <button
@@ -229,7 +262,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             className="px-3.5 py-2 rounded-xl border border-stone-300 bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold transition flex items-center gap-1.5 shadow-xs"
           >
             <Download className="w-3.5 h-3.5 text-stone-600" />
-            엑셀(CSV) 저장
+            엑셀 저장
           </button>
 
           <button
@@ -240,6 +273,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             비밀번호 변경
           </button>
         </div>
+      </div>
+
+      {/* Multi-Device Aggregation Notice Banner */}
+      <div className="bg-gradient-to-r from-amber-50 via-yellow-50 to-orange-50 rounded-2xl p-4 border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <Smartphone className="w-4 h-4 text-amber-700 shrink-0" />
+          <div>
+            <span className="font-bold text-amber-950">
+              📱 학생 각자의 스마트폰·태블릿에서 입력한 하루공책 취합 방법:
+            </span>
+            <p className="text-stone-600 text-[11px] mt-0.5">
+              상단 <span className="font-bold text-amber-900">[학생 배포용 링크 & QR]</span>을 복사해 학생들에게 안내하세요. 학생들이 제출하면 우측 <span className="font-bold text-amber-900">[시트 실시간 취합]</span> 버튼을 누르거나 페이지 진입 시 자동으로 교사 컴퓨터에 모입니다!
+            </p>
+          </div>
+        </div>
+
+        {lastSyncTime && (
+          <div className="text-[11px] text-stone-500 font-medium shrink-0 bg-white/80 px-2.5 py-1 rounded-xl border border-amber-200">
+            마지막 취합: {lastSyncTime}
+          </div>
+        )}
       </div>
 
       {/* Class filter and Stats Grid */}
